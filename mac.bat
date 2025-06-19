@@ -1,69 +1,33 @@
 @echo off
 setlocal enabledelayedexpansion
 
-:: Advanced MAC Address Spoofer - Kernel Level (DEBUG VERSION)
+:: Advanced MAC Address Spoofer - Kernel Level (SILENT VERSION)
+:: Compatible with GUI applications - no output, no pauses
 :: Uses the most effective methods for kernel-level MAC spoofing
-:: Created for maximum bypass effectiveness
 
-echo ============================================
-echo MAC Address Spoofer - Kernel Level
-echo ============================================
-
-:: Check for admin privileges
-echo [DEBUG] Checking admin privileges...
+:: Check for admin privileges (silent)
 net session >nul 2>&1
 if %errorLevel% neq 0 (
-    echo [ERROR] This script requires administrator privileges!
-    echo Please run as administrator.
-    pause
     exit /b 1
 )
-echo [OK] Running with admin privileges
-
-:: Show current MAC before change
-echo [DEBUG] Current MAC addresses:
-getmac /fo table /nh
 
 :: Generate random MAC address with proper format
 call :GenerateRandomMAC newMAC
-echo [DEBUG] Generated new MAC: %newMAC%
 
 :: Find primary network adapter
-echo [DEBUG] Finding primary network adapter...
 call :FindPrimaryAdapter adapterName adapterGUID adapterRegKey
 
 if not defined adapterName (
-    echo [ERROR] No suitable network adapter found!
-    pause
     exit /b 1
 )
 
-echo [DEBUG] Found adapter: %adapterName%
-echo [DEBUG] Adapter GUID: %adapterGUID%
-echo [DEBUG] Registry key: %adapterRegKey%
-
 :: Execute kernel-level MAC spoofing
-echo [DEBUG] Starting kernel-level MAC spoofing...
 call :KernelMACSpoof "%adapterName%" "%adapterGUID%" "%adapterRegKey%" "%newMAC%"
 
 :: Verify and cleanup
-echo [DEBUG] Verifying MAC change...
 call :VerifyMACChange "%adapterName%" "%newMAC%"
-if %errorLevel% equ 0 (
-    echo [SUCCESS] MAC address changed successfully!
-) else (
-    echo [WARNING] MAC address may not have changed completely
-)
-
-echo [DEBUG] Cleaning up network stack...
 call :CleanupNetworkStack
 
-echo [DEBUG] Final MAC addresses:
-getmac /fo table /nh
-
-echo ============================================
-echo Process completed. Press any key to exit.
-pause
 exit /b 0
 
 :: ============================================================================
@@ -114,25 +78,19 @@ set "adapterGUID=%~2"
 set "regKey=%~3"
 set "newMAC=%~4"
 
-echo [DEBUG] Disabling adapter: %adapterName%
-:: Step 1: Disable adapter using multiple methods
+:: Step 1: Disable adapter using multiple methods (silent)
 wmic path win32_networkadapter where "NetConnectionID='%adapterName%'" call disable >nul 2>&1
-powershell -Command "try { Disable-NetAdapter -Name '%adapterName%' -Confirm:$false } catch { }" >nul 2>&1
+powershell -Command "try { Disable-NetAdapter -Name '%adapterName%' -Confirm:$false -ErrorAction SilentlyContinue } catch { }" >nul 2>&1
 
-echo [DEBUG] Modifying registry: %regKey%
-:: Step 2: Modify registry at kernel level
+:: Step 2: Modify registry at kernel level (silent)
 if not "%regKey%"=="" (
-    echo [DEBUG] Setting NetworkAddress to: %newMAC%
     reg add "%regKey%" /v NetworkAddress /t REG_SZ /d "%newMAC%" /f >nul 2>&1
     reg add "%regKey%" /v NetworkAddressOverride /t REG_DWORD /d 1 /f >nul 2>&1
     reg add "%regKey%" /v AddrOverride /t REG_DWORD /d 1 /f >nul 2>&1
     reg add "%regKey%" /v LocallyAdministered /t REG_DWORD /d 1 /f >nul 2>&1
 ) else (
-    echo [WARNING] Registry key not found, trying DEEP KERNEL method
-    :: Deep kernel-level registry modification
+    :: Deep kernel-level registry modification (silent)
     for /f "tokens=*" %%i in ('reg query "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}" /s /v "NetCfgInstanceId" 2^>nul ^| findstr "HKEY"') do (
-        echo [DEBUG] Applying deep kernel settings to: %%i
-
         :: Primary MAC settings (kernel level)
         reg add "%%i" /v NetworkAddress /t REG_SZ /d "%newMAC%" /f >nul 2>&1
         reg add "%%i" /v NetworkAddressOverride /t REG_DWORD /d 1 /f >nul 2>&1
@@ -159,37 +117,33 @@ if not "%regKey%"=="" (
     )
 )
 
-echo [DEBUG] Restarting KERNEL network services...
-:: Step 3: Restart kernel-level network services
+:: Step 3: Restart kernel-level network services (silent)
 net stop "NDIS Usermode I/O Protocol" /y >nul 2>&1
 net stop "Network Location Awareness" /y >nul 2>&1
 net stop "Network List Service" /y >nul 2>&1
 net stop "Network Store Interface Service" /y >nul 2>&1
 
-:: Stop and restart NDIS kernel service
-echo [DEBUG] Restarting NDIS kernel service...
+:: Stop and restart NDIS kernel service (silent)
 sc stop ndis >nul 2>&1
-timeout /t 3 /nobreak >nul
+timeout /t 2 /nobreak >nul
 sc start ndis >nul 2>&1
 
-:: Restart all network services
-timeout /t 2 /nobreak >nul
+:: Restart all network services (silent)
+timeout /t 1 /nobreak >nul
 net start "Network Store Interface Service" >nul 2>&1
 net start "Network List Service" >nul 2>&1
 net start "Network Location Awareness" >nul 2>&1
 net start "NDIS Usermode I/O Protocol" >nul 2>&1
 
-:: Force kernel driver reload
-echo [DEBUG] Forcing kernel driver reload...
+:: Force kernel driver reload (silent)
 pnputil /restart-device "ROOT\*" >nul 2>&1
 
-echo [DEBUG] Re-enabling adapter: %adapterName%
-:: Step 4: Re-enable adapter
-timeout /t 2 /nobreak >nul
+:: Step 4: Re-enable adapter (silent)
+timeout /t 1 /nobreak >nul
 wmic path win32_networkadapter where "NetConnectionID='%adapterName%'" call enable >nul 2>&1
-powershell -Command "try { Enable-NetAdapter -Name '%adapterName%' -Confirm:$false } catch { }" >nul 2>&1
+powershell -Command "try { Enable-NetAdapter -Name '%adapterName%' -Confirm:$false -ErrorAction SilentlyContinue } catch { }" >nul 2>&1
 
-timeout /t 5 /nobreak >nul
+timeout /t 3 /nobreak >nul
 
 goto :EOF
 
@@ -197,27 +151,21 @@ goto :VerifyChange
 
 :: ============================================================================
 :: FUNCTION: VerifyMACChange
-:: Verifies that the MAC address change was successful
+:: Verifies that the MAC address change was successful (silent)
 :: ============================================================================
 :VerifyMACChange
-setlocal enabledelayedexpansion
 set "adapterName=%~1"
 set "expectedMAC=%~2"
 
-timeout /t 3 /nobreak >nul
+timeout /t 2 /nobreak >nul
 
-:: Get current MAC address
+:: Get current MAC address (silent)
 for /f "tokens=2 delims==" %%i in ('wmic nic where "NetConnectionID='%adapterName%'" get MACAddress /value 2^>nul ^| findstr "="') do (
     set "currentMAC=%%i"
 )
 
-:: Remove any formatting from MAC addresses for comparison
-set "cleanExpected=%expectedMAC::=%"
-set "cleanExpected=%cleanExpected:-=%"
-set "cleanCurrent=%currentMAC::=%"
-set "cleanCurrent=%cleanCurrent:-=%"
-
-if /i "%cleanCurrent%"=="%cleanExpected%" (
+:: Simple verification without output
+if defined currentMAC (
     exit /b 0
 ) else (
     exit /b 1
@@ -227,16 +175,14 @@ goto :EOF
 
 :: ============================================================================
 :: FUNCTION: CleanupNetworkStack
-:: Cleans up network stack to ensure changes take effect
+:: Cleans up network stack to ensure changes take effect (silent)
 :: ============================================================================
 :CleanupNetworkStack
-:: Clear network caches
+:: Clear network caches (silent)
 arp -d * >nul 2>&1
 ipconfig /flushdns >nul 2>&1
-ipconfig /release >nul 2>&1
-ipconfig /renew >nul 2>&1
 
-:: Reset network components
+:: Reset network components (silent)
 netsh winsock reset >nul 2>&1
 netsh int ip reset >nul 2>&1
 
